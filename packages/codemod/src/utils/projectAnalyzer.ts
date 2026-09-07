@@ -10,14 +10,18 @@ const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '
 const SCAN_SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'build', '.next', '.nuxt', 'coverage']);
 const SCAN_FILE_BUDGET = 5000;
 
-// Matches a quoted v1 SDK client/server subpath import specifier — e.g.
+// Matches a quoted v1 SDK client/server subpath — e.g.
 //   '@modelcontextprotocol/sdk/client/index.js'   "@modelcontextprotocol/sdk/server/mcp.js"
 //   '@modelcontextprotocol/sdk/client'            (extensionless / bare subpath; see the extensionless
 //                                                  import matching the codemod already supports)
-// Anchored to the opening quote and a trailing `/` or closing quote so that comments or prose that
-// merely mention the path do not count, and `…/client` is not confused with `…/clientfoo`.
-const CLIENT_IMPORT_RE = /['"`]@modelcontextprotocol\/sdk\/client(?:\/|['"`])/;
-const SERVER_IMPORT_RE = /['"`]@modelcontextprotocol\/sdk\/server(?:\/|['"`])/;
+// — but only in a genuine module-specifier position: after `from` (static imports and re-exports),
+// `import` (side-effect and dynamic imports), or `require(`. An SDK path that merely appears in an
+// ordinary string literal (example text, log messages, config values) is not an import and must not
+// count toward project-type inference (#2760). The tail is anchored to a trailing `/` or closing
+// quote so `…/client` is not confused with `…/clientfoo`.
+const SPECIFIER_POSITION = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*|\brequire\s*\(\s*)/.source;
+const CLIENT_IMPORT_RE = new RegExp(SPECIFIER_POSITION + /['"`]@modelcontextprotocol\/sdk\/client(?:\/|['"`])/.source);
+const SERVER_IMPORT_RE = new RegExp(SPECIFIER_POSITION + /['"`]@modelcontextprotocol\/sdk\/server(?:\/|['"`])/.source);
 
 export function findPackageJson(startDir: string): string | undefined {
     let dir = path.resolve(startDir);

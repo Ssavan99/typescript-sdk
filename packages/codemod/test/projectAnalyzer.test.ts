@@ -180,6 +180,37 @@ describe('analyzeProject', () => {
             expect(analyzeProject(dir).projectType).toBe('client');
         });
 
+        it('ignores an SDK subpath that appears only in a string literal (not a module specifier)', () => {
+            // A real client import plus a server subpath stored as data in an ordinary string
+            // literal. Counting quoted paths anywhere would flip this to "both" (rewriting shared
+            // imports to the server package and adding a server dependency to a client-only
+            // project); only genuine module specifiers may contribute to inference (#2760).
+            const dir = v1Project({
+                'a.ts': [
+                    `import { Client } from '@modelcontextprotocol/sdk/client/index.js';`,
+                    `const example = '@modelcontextprotocol/sdk/server/mcp.js';`,
+                    ''
+                ].join('\n')
+            });
+            expect(analyzeProject(dir).projectType).toBe('client');
+        });
+
+        it('still infers from dynamic import() and require() specifiers', () => {
+            const dir = v1Project({
+                'a.ts': `const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');`,
+                'b.cjs': `const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');`
+            });
+            expect(analyzeProject(dir).projectType).toBe('both');
+        });
+
+        it('still infers from a side-effect import and an export-from re-export', () => {
+            const dir = v1Project({
+                'a.ts': `import '@modelcontextprotocol/sdk/client/index.js';`,
+                'b.ts': `export { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';`
+            });
+            expect(analyzeProject(dir).projectType).toBe('both');
+        });
+
         it('infers from source even without a package.json', () => {
             const dir = createTempDir();
             mkdirSync(path.join(dir, 'src'), { recursive: true });
