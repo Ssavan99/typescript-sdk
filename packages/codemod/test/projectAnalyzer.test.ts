@@ -211,6 +211,43 @@ describe('analyzeProject', () => {
             expect(analyzeProject(dir).projectType).toBe('both');
         });
 
+        it('still infers from vi./jest. mock-method specifiers (the forms the mock-paths transform rewrites)', () => {
+            const dir = v1Project({
+                'a.test.ts': `vi.mock('@modelcontextprotocol/sdk/client/index.js');`,
+                'b.test.ts': `const actual = jest.requireActual('@modelcontextprotocol/sdk/server/mcp.js');`
+            });
+            expect(analyzeProject(dir).projectType).toBe('both');
+        });
+
+        it('still infers from a dynamic import() carrying a webpack magic comment', () => {
+            const dir = v1Project({
+                'a.ts': `const mod = await import(/* webpackChunkName: "mcp-client" */ '@modelcontextprotocol/sdk/client/index.js');`
+            });
+            expect(analyzeProject(dir).projectType).toBe('client');
+        });
+
+        it('still infers from require.resolve()', () => {
+            const dir = v1Project({
+                'a.cjs': `const p = require.resolve('@modelcontextprotocol/sdk/server/mcp.js');`
+            });
+            expect(analyzeProject(dir).projectType).toBe('server');
+        });
+
+        it('documents a known limitation: a string whose text embeds a full import statement still counts', () => {
+            // The scan is lexical: the inner `from '` puts the quoted path in a specifier position
+            // even though it sits inside string data. Distinguishing that from a real import needs
+            // parsing, which the budget-bounded scan deliberately avoids. If the analyzer ever gets
+            // smart enough to make this fail, flip the expectation to 'client'.
+            const dir = v1Project({
+                'a.ts': [
+                    `import { Client } from '@modelcontextprotocol/sdk/client/index.js';`,
+                    `const help = "import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'";`,
+                    ''
+                ].join('\n')
+            });
+            expect(analyzeProject(dir).projectType).toBe('both');
+        });
+
         it('infers from source even without a package.json', () => {
             const dir = createTempDir();
             mkdirSync(path.join(dir, 'src'), { recursive: true });
